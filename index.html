@@ -1,0 +1,522 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="ie=edge" />
+    <meta name="viewport"
+        content="width = device-width, initial-scale = 1.0, minimum-scale = 1, maximum-scale = 1, user-scalable = no, viewport-fit=cover,minimal-ui" />
+    <title></title>
+    <script src="https://cdn.jsdelivr.net/npm/phaser@3.55.2/dist/phaser.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/matter-js@0.17.1/build/matter.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/localforage@1.10.0/dist/localforage.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/howler@2.2.3/dist/howler.min.js"></script>
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+    <script>
+
+        var bgm = new Howl({
+            src: ['bgm.mp3'],
+            loop: true,
+            volume: 0.2,
+        });
+
+        var bgmOver = new Howl({
+            src: ['gameover.mp3']
+        });
+
+        var bgmClear = new Howl({
+            src: ['clear.mp3']
+        });
+
+
+        var seBreak = new Howl({
+            src: ['break.mp3']
+        });
+
+        var sePop = new Howl({
+            src: ['pop.mp3']
+        });
+
+        var gameWidth = 720, gameHeight = 1280, bGame = false;
+        var currentScene, currentGameStage;
+        var movingBar, currentBall, cursors;
+        var txtRemainBall, txtEnding, btnReturn;
+        var currentScreen;
+        var remainBall = 0;
+        var isVideoPlaying = false;
+        var stageLocks = [0, 0, -1, -1, -1, -1];
+        var omakeLocks = [1, 1, -1, -1, -1, -1];
+        var blockArray = [];
+        var omakeVideo;
+        class titleScene extends Phaser.Scene {
+            constructor() {
+                super({ key: "titleScene", active: true });
+            }
+            create() {
+                currentScene = this;
+                let text = this.add
+                    .text(150, 100, "ブロック崩しゲーム")
+                    .setFontSize(46)
+                    .setColor("#0");
+                var startButton = this.add
+                    .text(100, 400, "GAME START")
+                    .setStroke("#0000ff", 4)
+                    .setBackgroundColor("#ddbcff")
+                    .setFontSize("60px")
+                    .setColor("#0f0")
+                    .setInteractive();
+                startButton.on(
+                    "pointerdown",
+                    () => {
+                        this.scene.start("stageSelectScene");
+                    },
+                    this
+                );
+                var omakeButton = this.add
+                    .text(200, 600, "Gallary")
+                    .setStroke("#0000ff", 4)
+                    .setBackgroundColor("#ddbcff")
+                    .setFontSize("60px")
+                    .setColor("#0f0")
+                    .setInteractive();
+                omakeButton.on(
+                    "pointerdown",
+                    () => {
+                        this.scene.start("omakeSelectScene");
+                    },
+                    this
+                );
+
+            }
+        }
+        class stageSelectScene extends Phaser.Scene {
+            constructor() {
+                super({ key: "stageSelectScene", active: false });
+            }
+            preload() {
+                this.load.spritesheet("stageIcon", "./stage_icon.png", {
+                    frameWidth: 150,
+                    frameHeight: 150
+                });
+            }
+            create() {
+                currentScene = this;
+                let text = this.add
+                    .text(150, 50, "Stage Select")
+                    .setFontSize(46)
+                    .setColor("#0");
+
+                var stageButtons = [];
+                for (var nLoop = 0; nLoop < stageLocks.length; nLoop++) {
+                    let posX = (nLoop % 3);
+                    let posY = parseInt(nLoop / 3);
+                    stageButtons.push(currentScene.add.sprite(100 + posX * 250, 200 + posY * 300, "stageIcon"));
+                    stageButtons[stageButtons.length - 1].setInteractive();
+                    stageButtons[stageButtons.length - 1].stageNo = (nLoop + 1);
+                    let text = currentScene.add
+                        .text(25 + posX * 250, 280 + posY * 300, "Stage " + (nLoop + 1))
+                        .setFontSize(40)
+                        .setColor("#0");
+
+                    stageButtons[stageButtons.length - 1].setFrame(1);
+                    if (stageLocks[nLoop] == 0) {
+                        stageButtons[stageButtons.length - 1].setFrame(0);
+                        stageButtons[stageButtons.length - 1].on("pointerdown", function (pointer) {
+                            console.log("Stage =" + this.stageName);
+                            currentGameStage = this.stageNo;
+                            currentScene.scene.start("gameScene");
+                        });
+                    } else if (stageLocks[nLoop] == -1) {
+                        text.text = " 準備中";
+                        stageButtons[stageButtons.length - 1].setFrame(2);
+                    }
+                }
+                btnReturn = currentScene.add
+                    .text(gameWidth / 2 - 100, 900, " BACK ")
+                    .setScrollFactor(0)
+                    .setFontSize(46)
+                    .setColor("#ff0")
+                    .setBackgroundColor("#aa5500")
+                    .setInteractive();
+                btnReturn.on(
+                    "pointerdown",
+                    () => {
+                        currentScene.scene.start("titleScene");
+                    },
+                    this);
+
+            }
+        }
+
+        class omakeSelectScene extends Phaser.Scene {
+            constructor() {
+                super({ key: "omakeSelectScene", active: false });
+            }
+            preload() {
+                this.load.spritesheet("stageIcon", "./stage_icon.png", {
+                    frameWidth: 150,
+                    frameHeight: 150
+                });
+                this.load.video('omake1', './omake1.mp4', 'loadeddata', false, true);
+                this.load.video('omake2', './omake2.mp4', 'loadeddata', false, true);
+                this.load.image('bgScreen', './videoScreen.png');
+
+            }
+            create() {
+                currentScene = this;
+                let text = this.add
+                    .text(150, 50, "Omake Select")
+                    .setFontSize(46)
+                    .setColor("#0");
+
+
+                btnReturn = currentScene.add
+                    .text(gameWidth / 2 - 100, 900, " BACK ")
+                    .setScrollFactor(0)
+                    .setFontSize(46)
+                    .setColor("#ff0")
+                    .setBackgroundColor("#aa5500")
+                    .setInteractive();
+                btnReturn.on(
+                    "pointerdown",
+                    () => {
+                        currentScene.scene.start("titleScene");
+                    },
+                    this);
+
+
+                localforage.getItem("blockBreakOmakeUnlock", function (err, value) {
+                    if (value != null) {
+                        var maxLen = omakeLocks.length;
+                        if (omakeLocks.length > value.length) {
+                            maxLen = value.length;
+                        }
+                        for (var i = 0; i < maxLen; i++) {
+                            if (omakeLocks[i] == 1 && value[i] == 0) {
+                                omakeLocks[i] = 0;
+                            }
+                        }
+                    }
+                    var stageButtons = [];
+                    for (var nLoop = 0; nLoop < omakeLocks.length; nLoop++) {
+                        let posX = (nLoop % 3);
+                        let posY = parseInt(nLoop / 3);
+                        stageButtons.push(currentScene.add.sprite(100 + posX * 250, 200 + posY * 300, "stageIcon"));
+                        stageButtons[stageButtons.length - 1].setInteractive();
+                        stageButtons[stageButtons.length - 1].stageNo = (nLoop + 1);
+                        let text = currentScene.add
+                            .text(25 + posX * 250, 280 + posY * 300, "Stage " + (nLoop + 1))
+                            .setFontSize(40)
+                            .setColor("#0");
+
+                        stageButtons[stageButtons.length - 1].setFrame(1);
+                        if (omakeLocks[nLoop] == 0) {
+                            stageButtons[stageButtons.length - 1].setFrame(0);
+                            stageButtons[stageButtons.length - 1].on("pointerdown", function (pointer) {
+                                if (isVideoPlaying == false) {
+                                    currentScreen.visible = true;
+                                    omakeVideo = currentScene.add.video(gameWidth / 2, gameHeight / 2, 'omake' + this.stageNo);
+                                    omakeVideo.play(true);
+                                    isVideoPlaying = true;
+                                }
+                            });
+                        } else if (omakeLocks[nLoop] == -1) {
+                            text.text = " 準備中";
+                            stageButtons[stageButtons.length - 1].setFrame(2);
+                        }
+                    }
+                    currentScreen = currentScene.add.sprite(gameWidth / 2, gameHeight / 2, "bgScreen");
+                    currentScreen.visible = false;
+                    currentScreen.setInteractive();
+                    currentScreen.on(
+                        "pointerdown",
+                        () => {
+                            if (isVideoPlaying == true) {
+                                currentScreen.visible = false;
+                                omakeVideo.setPaused(true);
+                                omakeVideo.visible = false;
+                                omakeVideo.destroy();
+                                isVideoPlaying = false;
+
+                            }
+                        },
+                        this
+                    );
+                });
+
+
+            }
+        }
+
+
+        class blockContainer extends Phaser.GameObjects.Container {
+            constructor(scene, x, y, _no) {
+                super(scene, x, y);
+                this._obj = scene.add.sprite(0, 0, "block1");
+                this.add(this._obj);
+                this.setSize(150, 50);
+                this._bodyObj = scene.matter.add.gameObject(this);//.setFixedRotation();
+                this._bodyObj.body.label = "block";
+                this._bodyObj.setBounce(1.0);
+                this._bodyObj.body.friction = 0;
+                this._bodyObj.setMass(18);
+                this._bodyObj.body.noCount = _no;
+                this.noCount = _no;
+                this._bodyObj.body.isStatic = true;
+                scene.add.existing(this._bodyObj);
+                this.isAlive = true;
+            }
+            blockErase() {
+                seBreak.play();
+                this.isAlive = false;
+                this._bodyObj.destroy();
+            }
+        }
+
+        class ballContainer extends Phaser.GameObjects.Container {
+            constructor(scene, x, y, _dirX, _dirY) {
+                super(scene, x, y);
+                this._obj = scene.add.sprite(0, 0, "ball");
+                this.add(this._obj);
+                this._bodyCircle = scene.matter.add.circle(x, y, 40);
+                this._bodyObj = scene.matter.add.gameObject(this, this._bodyCircle);
+                this._bodyObj.body.label = "ball";
+                this._bodyObj.setBounce(1.01);
+                this._bodyObj.setMass(2);
+                this._bodyObj.body.friction = 0;
+                this._bodyObj.body.frictionAir = 0;
+                scene.add.existing(this._bodyObj);
+                this._bodyObj.setVelocityX(_dirX);
+                this._bodyObj.setVelocityY(_dirY);
+            }
+            ballErase() {
+                this._bodyObj.destroy();
+            }
+        }
+
+        class barContainer extends Phaser.GameObjects.Container {
+            constructor(scene, x, y) {
+                super(scene, x, y);
+                this._obj = scene.add.sprite(0, 0, "bar");
+                this.add(this._obj);
+                this.setSize(300, 50);
+                this._bodyObj = scene.matter.add.gameObject(this).setFixedRotation();
+                this._bodyObj.body.label = "bar";
+                this._bodyObj.setBounce(1.5);
+                this._bodyObj.body.friction = 0;
+                //this._bodyObj.setBounce(bounds);
+                this._bodyObj.body.isStatic = true;
+                scene.add.existing(this._bodyObj);
+            }
+            setVelocityX(_val) {
+                this._bodyObj.setVelocityX(_val);
+            }
+            setVelocityY(_val) {
+                this._bodyObj.setVelocityY(_val);
+            }
+        }
+        function initUI() {
+            txtRemainBall = currentScene.add
+                .text(50, 20, "残弾数:" + remainBall)
+                .setScrollFactor(0)
+                .setFontSize(30)
+                .setStroke("#ffffff", 2)
+                .setColor("#0");
+
+            txtEnding = currentScene.add
+                .text(200, 100, "")
+                .setScrollFactor(0)
+                .setFontSize(46)
+                .setColor("#ff0");
+
+            btnReturn = currentScene.add
+                .text(gameWidth / 2 - 100, 400, " BACK ")
+                .setScrollFactor(0)
+                .setFontSize(46)
+                .setColor("#ff0")
+                .setBackgroundColor("#aa5500")
+                .setInteractive();
+            btnReturn.on(
+                "pointerdown",
+                () => {
+                    if (bgm != null) {
+                        bgm.stop();
+                    }
+                    if (bgmOver != null) {
+                        bgmOver.stop();
+                    }
+                    currentScene.scene.start("titleScene");
+                },
+                this);
+            btnReturn.visible = false;
+        }
+
+        function initGameScene() {
+            var bg = currentScene.add
+                .tileSprite(0, 0, gameWidth, gameHeight, 'stage' + currentGameStage)
+                .setOrigin(0)
+                .setScrollFactor(0);
+            currentScene.matter.world.setBounds(0, 0, 720, 1500);
+            movingBar = new barContainer(currentScene, 310, 1200);
+            currentBall = new ballContainer(currentScene, 310, 800, 9, 9);
+            cursors = currentScene.input.keyboard.createCursorKeys();
+
+            blockArray = [];
+            if (currentGameStage == 1) {
+                blockArray.push(new blockContainer(currentScene, 200, 450, blockArray.length + 1));
+                blockArray.push(new blockContainer(currentScene, 200, 550, blockArray.length + 1));
+
+                blockArray.push(new blockContainer(currentScene, 400, 450, blockArray.length + 1));
+                blockArray.push(new blockContainer(currentScene, 400, 550, blockArray.length + 1));
+
+            }
+            else if (currentGameStage == 2) {
+                blockArray.push(new blockContainer(currentScene, 200, 450, blockArray.length + 1));
+                blockArray.push(new blockContainer(currentScene, 200, 550, blockArray.length + 1));
+                blockArray.push(new blockContainer(currentScene, 200, 650, blockArray.length + 1));
+                blockArray.push(new blockContainer(currentScene, 200, 750, blockArray.length + 1));
+
+                blockArray.push(new blockContainer(currentScene, 400, 450, blockArray.length + 1));
+                blockArray.push(new blockContainer(currentScene, 400, 550, blockArray.length + 1));
+                blockArray.push(new blockContainer(currentScene, 400, 650, blockArray.length + 1));
+                blockArray.push(new blockContainer(currentScene, 400, 750, blockArray.length + 1));
+
+            }
+
+        }
+
+
+        class gameScene extends Phaser.Scene {
+            constructor() {
+                super({ key: "gameScene", active: false });
+            }
+            preload() {
+                console.log("currentGameStage" + currentGameStage);
+                this.load.image("stage" + currentGameStage, "./stage" + currentGameStage + ".jpg");
+
+                this.load.image("ball", "./ball80.png");
+                this.load.image("bar", "./bar300x50.png");
+                this.load.image("block1", "./block1_150x50.png");
+            }
+            create() {
+                currentScene = this;
+                initGameScene();
+
+                remainBall = 3;
+                bGame = true;
+                initUI();
+
+                bgm.play();
+                currentScene.matter.world.on("collisionstart", function (e) {
+                    e.pairs.forEach(function (p) {
+                        if (p.bodyA.label == "ball" || p.bodyB.label == "ball") {
+                            if (p.bodyA.label == "block" || p.bodyB.label == "block") {
+                                if (p.bodyA.label == "block") {
+                                    let obj = blockArray.find(
+                                        (o) => o.noCount === p.bodyA.noCount
+                                    );
+                                    obj.blockErase();
+                                } else {
+                                    let obj = blockArray.find(
+                                        (o) => o.noCount === p.bodyB.noCount
+                                    );
+                                    obj.blockErase();
+                                }
+                            } else if (p.bodyA.label == "bar" || p.bodyB.label == "bar") {
+                                sePop.play();
+                            }
+                        }
+                    });
+                });
+
+
+            }
+
+            update() {
+                if (bGame == true) {
+
+                    if (cursors.left.isDown) {
+                        movingBar.x = movingBar.x - 10;
+                    } else if (cursors.right.isDown) {
+                        movingBar.x = movingBar.x + 10;
+                    }
+
+                    if (currentBall != null) {
+                        if (currentBall.y >= 1300) {
+                            currentBall.ballErase();
+                            currentBall = null;
+                            if (remainBall > 0) {
+                                remainBall = remainBall - 1;
+                                txtRemainBall.text = "残弾数:" + remainBall;
+                                currentBall = new ballContainer(currentScene, 310, 800, 9, 9);
+                            } else {
+                                bGame = false;
+                                btnReturn.visible = true;
+                                txtEnding.text = "GAME OVER";
+                                bgm.stop();
+                                bgmOver.play();
+                            }
+                        }
+                    }
+
+                    //check Game Clear
+                    var remainBlock = 0;
+                    for (var i = 0; i < blockArray.length; i++) {
+                        if (blockArray[i].isAlive == true) {
+                            remainBlock = remainBlock + 1;
+                        }
+                    }
+                    if (remainBlock == 0) {
+                        console.log("CLEAR");
+                        bGame = false;
+                        btnReturn.visible = true;
+                        txtEnding.text = "GAME CLEAR";
+                        currentBall.ballErase();
+                        bgm.stop();
+                        bgmClear.play();
+
+                        doUpdateDB();
+                    }
+                }
+            }
+        }
+
+        function doUpdateDB() {
+            omakeLocks[currentGameStage - 1] = 0;//Release
+            localforage.setItem("blockBreakOmakeUnlock", omakeLocks);
+
+        }
+
+        var config = {
+            type: Phaser.AUTO,
+            width: gameWidth,
+            height: gameHeight,
+            backgroundColor: "#eaffff",
+            autoResize: true,
+            physics: {
+                default: "matter",
+                matter: {
+                    gravity: {
+                        x: 0,
+                        y: 0
+                    },
+                    debug: true
+                }
+            },
+            dom: {
+                createContainer: true
+            },
+            scale: {
+                mode: Phaser.Scale.FIT,
+                autoCenter: Phaser.Scale.CENTER_BOTH
+            },
+            scene: [titleScene, stageSelectScene, omakeSelectScene, gameScene]
+        };
+        var game = new Phaser.Game(config);
+    </script>
+</body>
+
+</html>
